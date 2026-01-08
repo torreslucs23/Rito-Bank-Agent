@@ -10,3 +10,4 @@ wheels/
 .venv
 
 test_temp.py
+.env
