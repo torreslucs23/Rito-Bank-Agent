@@ -21,9 +21,10 @@ state1 = {
 
 async def get_model_message(query: str) -> AgentStateModel | str:
     global state1
-    print(state1['messages'][-2].content if state1['messages'] else "No messages yet")
 
     state1["messages"].append(HumanMessage(content=query))
-    
-    state1 = app_state.graph.invoke(state1)
+    try:
+        state1 = app_state.graph.invoke(state1)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
     return state1["messages"][-1].content
