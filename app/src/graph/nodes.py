@@ -8,6 +8,7 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, Tool
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import END, START
 from app.src.llm.tools import save_cpf, save_birth_date
+from app.src.services.user_service import authenticate_user
 
 
 
@@ -34,7 +35,7 @@ class AgentState(TypedDict):
     
 
 system_prompt_bank = """
-Você é um assistente virtual especializado em atendimento bancário. Sua função é ajudar os clientes com suas dúvidas e necessidades relacionadas aos serviços bancários.
+Você é um assistente virtual especializado em atendimento bancário. Sua função é ajudar os clientes com suas dúvidas e necessidades relacionadas aos serviços bancários. Você sempre é breve em suas mensagens, sem puxar muito assunto.
 """
 
 triagem_prompt_bank = """
@@ -48,14 +49,9 @@ def supervisor_node(state: AgentState) -> AgentState:
     """
     Supervisor: analisa mensagem e decide se chama triagem ou responde direto
     """
-    
-    # if not state.get('authenticated'):
-    #     state['next_agent'] = 'triage_agent'
-    #     return state
-    
+
     messages = state["messages"]
     recent_messages = messages[-30:] if len(messages) > 30 else messages
-    print(recent_messages if recent_messages else "")
     
     system_prompt = f""" {system_prompt_bank}
 
@@ -77,10 +73,8 @@ Responda APENAS UMA PALAVRA (TRIAGE ou DIRECT):"""
     response = llm.invoke([SystemMessage(content=system_prompt), *recent_messages])
     decision = response.content.strip().upper()
     
-    print(f" Supervisor decidiu: {decision}")
     
     if "TRIAGE" in decision:
-        print("   → Redirecionando para agente de triagem")
         state['next_agent'] = 'triage_agent'
         state['waiting_for_agent'] = True
     else:
@@ -99,7 +93,7 @@ IMPORTANTE:
 
 Responda de forma breve e cordial. Baseie-se em coisas do contexto de mensagens que voce já tem com ele."""
 
-        direct_response = llm.invoke([SystemMessage(content=direct_prompt), *recent_messages], temperature=0.3, max_tokens=100)
+        direct_response = llm.invoke([SystemMessage(content=direct_prompt), *recent_messages], temperature=0.2, max_tokens=100)
         
         state['messages'].append(AIMessage(content=direct_response.content))
         state['finish'] = True
@@ -110,7 +104,6 @@ def triage_node(state: AgentState) -> AgentState:
     """
     Triage Agent: Handles authentication
     """
-    print("TRIAGE AGENT activated")
     
     messages = state["messages"]
     last_message = messages[-1]
@@ -147,7 +140,6 @@ Exemplos de quando chamar a tool:
         temperature=0.3 )
         
         if response.tool_calls:
-            print(f"   Tool called: {response.tool_calls}")
             tool_call = response.tool_calls[0]
             cpf_result = save_cpf.invoke(tool_call["args"])
             
@@ -239,13 +231,30 @@ Exemplos de quando chamar a tool:
         )
         
         if response.tool_calls:
-            
             tool_call = response.tool_calls[0]
             birth_date_result = save_birth_date.invoke(tool_call["args"])
             
-            print(f"  Tool result: {birth_date_result}")
-            
             if birth_date_result['success']:
+                
+                user_is_authenticated = authenticate_user(state['cpf_input'], birth_date_result['birth_date'])
+                if(not user_is_authenticated['authenticated']):
+                    state['authentication_attempts'] += 1
+                    if(state['authentication_attempts'] >=3):
+                        state['messages'].append(AIMessage(
+                            content="Número máximo de tentativas de autenticação atingido. Vamos encerrar o atendimento por aqui."
+                        ))
+                        state['next_agent'] = END
+                        state['birth_date'] = None
+                        state['cpf_input'] = None
+                        return state
+                    else:
+                        state['messages'].append(AIMessage(
+                            content="Autenticação falhou. Por favor, verifique seus dados e envie o cpf novamente para reiniciar o processo de autenticação."
+                        ))
+                        state['birth_date'] = None
+                        state['cpf_input'] = None
+                        return state
+                    
                 state['birth_date'] = birth_date_result['birth_date']
                 
                 state['messages'].append(response)
@@ -269,6 +278,8 @@ Exemplos de quando chamar a tool:
                 temperature=0.3)
                 
                 state['messages'].append(AIMessage(content=final_response.content))
+                state['authenticated'] = True
+                return state
             else:
                 state['messages'].append(response)
                 response  = llm.invoke(
