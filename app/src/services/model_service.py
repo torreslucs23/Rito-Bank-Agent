@@ -12,11 +12,8 @@ state1 = {
     "birth_date": None,
     "authenticated": False,
     "authentication_attempts": 0,
-    "client": None,
     "next_agent": None,
     "finish": False,
-    "interview_data": None,
-    "last_request": None
 }
 
 async def get_model_message(query: str) -> AgentStateModel | str:

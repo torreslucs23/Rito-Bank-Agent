@@ -1,9 +1,11 @@
 from zipfile import Path
+import requests
 from langchain_core.tools import tool
 import re
 from datetime import datetime
 import pandas as pd
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -81,14 +83,14 @@ def save_birth_date(birth_date: str) -> dict:
 @tool
 def authenticate_customer(cpf: str, birth_date: str) -> dict:
     """
-    Autentica o cliente validando CPF e data de nascimento contra o CSV de clientes.
+    Authenticates the customer by validating CPF and birth date against the clients CSV.
     
     Args:
-        cpf: CPF do cliente (11 dígitos, apenas números)
-        birth_date: Data de nascimento no formato YYYY-MM-DD
+        cpf: Customer's CPF (11 digits, numbers only)
+        birth_date: Birth date in YYYY-MM-DD format
     
     Returns:
-        Dict com status de autenticação (True/False)
+        Dict with authentication status (True/False)
     """
     logger.debug(f"Authenticate customer called with CPF: {cpf} and Birth Date: {birth_date}")
     try:
@@ -136,3 +138,38 @@ def authenticate_customer(cpf: str, birth_date: str) -> dict:
             "authenticated": False,
             "message": f"Erro ao autenticar: {str(e)}"
         }
+        
+@tool
+def get_exchange_rate_tool(coin_code: str) -> str:
+    """
+    Queries the exchange rate of a currency against the Brazilian Real (BRL).
+    Use this tool to fetch currency values like USD, EUR, BTC, etc.
+    
+    Args:
+        coin_code: Currency code (e.g., 'USD', 'EUR', 'BTC'). 
+                   Does NOT accept pairs like 'USDEUR'. Only the source currency code.
+    Returns:
+        String containing the purchase value (bid) and quote date.
+    """
+    try:
+        print('tool exchange: ' + coin_code)
+        time.sleep(3)
+        clean_code = coin_code.replace("-BRL", "").strip().upper()
+        
+        url = f"https://economia.awesomeapi.com.br/last/{clean_code}-BRL"
+        response = requests.get(url, timeout=5)
+        if response.status_code != 200:
+            return f"Erro: Não consegui cotação para {clean_code}."
+        
+        data = response.json()
+        key = f"{clean_code}BRL"
+        
+        if key not in data:
+            return f"Erro: Moeda {clean_code} não encontrada na API."
+            
+        info = data[key]
+        valor = info['bid']
+        return f"{clean_code} custa R$ {valor} (BRL)."
+
+    except Exception as e:
+        return f"Erro técnico: {str(e)}"
