@@ -20,7 +20,7 @@ def build_graph():
     workflow.add_node("triage_agent", triage_node)
 
 
-    # Set entry point - always starts with supervisor
+    # Set entry point
     workflow.set_entry_point("supervisor")
 
     # Supervisor routes to agents or END
@@ -45,7 +45,6 @@ def build_graph():
             }
         )
 
-    print("compilando ...")
     return workflow.compile()
 
 def route_from_supervisor(state: AgentState) -> str:
@@ -63,24 +62,3 @@ def route_from_supervisor(state: AgentState) -> str:
 def route_from_triage(state: AgentState) -> str:
     """Triage always goes back to supervisor"""
     return END
-
-class AgentState(TypedDict):
-    """State shared across all agents in the graph. """
-    
-    #conversation messages
-    messages: Annotated[list, add_messages]
-    
-    # Auth data
-    cpf_input: Optional[str]
-    data_nascimento_input: Optional[str]
-    autenticado: bool
-    tentativas_autenticacao: int
-    
-    client: Optional[dict]
-    
-    #flow control
-    next_agent: Optional[dict]
-    finish: bool
-    
-    interview_data: Optional[dict]
-    last_request: Optional[dict]
