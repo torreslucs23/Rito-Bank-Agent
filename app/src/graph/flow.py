@@ -12,7 +12,10 @@ def build_graph():
     
     workflow.add_node("credit_agent", credit_agent_node)
     
-    workflow.add_node("credit_tools", ToolNode(tools=[process_limit_increase_request, get_score_and_or_limit]))
+    workflow.add_node("credit_tools", ToolNode(tools=[process_limit_increase_request, get_score_and_or_limit, submit_credit_interview]))
+    
+    workflow.add_node("interview_agent", interview_agent_node)
+    
 
     workflow.set_entry_point("supervisor")
 
@@ -23,6 +26,7 @@ def build_graph():
             "triage_agent": "triage_agent",
             "currency_agent": "currency_agent",
             "credit_agent": "credit_agent",
+            "interview_agent": "interview_agent",
             "finish": END,
             END: END
         }
@@ -57,6 +61,16 @@ def build_graph():
             END: END
         }
     )
+    
+    workflow.add_conditional_edges(
+    "interview_agent",
+    route_interview_logic,
+    {
+        "interview_tools": "credit_tools", # Reusando o nó de tools (certifique-se que ele tem a tool nova)
+        "credit_agent": "credit_agent",    # O LOOP MÁGICO
+        END: END
+    }
+)
     workflow.add_edge("credit_tools", "credit_agent")
 
     return workflow.compile()
@@ -101,3 +115,15 @@ def route_currency_logic(state: AgentState) -> str:
     if hasattr(last_message, "tool_calls") and len(last_message.tool_calls) > 0:
         return "currency_tools"
     return END 
+
+def route_interview_logic(state: AgentState) -> str:
+    last_message = state["messages"][-1]
+    
+    if hasattr(last_message, "tool_calls") and len(last_message.tool_calls) > 0:
+        return "interview_tools"
+
+    content = last_message.content.upper()
+    if "REDIRECT_CREDIT" in content or "TRANSFERIR" in content or "REANALISAR" in content:
+        return "credit_agent"
+        
+    return END

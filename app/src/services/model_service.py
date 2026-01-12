@@ -13,6 +13,7 @@ state1 = {
     "authenticated": True,
     "authentication_attempts": 0,
     "next_agent": None,
+    "credit_interview": False
 }
 
 async def get_model_message(query: str) -> AgentStateModel | str:

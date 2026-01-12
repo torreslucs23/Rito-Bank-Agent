@@ -7,6 +7,7 @@ import pandas as pd
 import logging
 import time
 from app.src.services.credit_service import CreditService
+from typing import Literal
 
 credit_service = CreditService()
 
@@ -65,8 +66,11 @@ def process_limit_increase_request(cpf: str, current_limit: float, requested_lim
             result["limit_updated"] = True 
             result["new_limit"] = requested_limit
         else:
-            result["message"] += " (Aprovado, mas houve erro técnico ao salvar no banco de dados)."
+            result["message"] += " (Aprovado, mas houve erro téQUEOR QUE MEU credito vá para 1000000000cnico ao salvar no banco de dados)."
             result["limit_updated"] = False
+    elif result["status"] == "rejeitado":
+        result["message"] += "limite foi rejeitado."
+        result["limit_updated"] = False
 
     return result
 
@@ -197,6 +201,40 @@ def authenticate_customer(cpf: str, birth_date: str) -> dict:
         return {
             "authenticated": False,
             "message": f"Erro ao autenticar: {str(e)}"
+        }
+        
+        
+@tool
+def submit_credit_interview(cpf: str, renda_mensal: float, tipo_emprego: Literal["formal", "autonomo", "desempregado"], despesas_fixas: float, num_dependentes: int, tem_dividas_ativas: bool) -> dict:
+    """
+    Submits financial interview data to recalculate the customer's score.
+    Should ONLY be called when ALL information has been collected.
+    
+    Args:
+        cpf: Customer's CPF (already available in context).
+        renda_mensal: Numeric value of monthly income.
+        tipo_emprego: Employment type ('formal', 'autonomo' or 'desempregado').
+        despesas_fixas: Numeric value of monthly expenses.
+        num_dependentes: Integer number of dependents.
+        tem_dividas_ativas: True if has overdue debts, False otherwise.
+    """
+    logger.info(f"Submetendo entrevista para CPF {cpf}")
+    print(f"Data is: renda={renda_mensal}, emprego={tipo_emprego}, despesas={despesas_fixas}, dependentes={num_dependentes}, dividas_ativas={tem_dividas_ativas}")
+    
+    result = credit_service.calculate_and_update_score(
+        cpf, renda_mensal, tipo_emprego, despesas_fixas, num_dependentes, tem_dividas_ativas
+    )
+    
+    if result.get("success"):
+        return {
+            "status": "completed",
+            "new_score": result["new_score"],
+            "message": "Entrevista processada com sucesso. O score foi atualizado."
+        }
+    else:
+        return {
+            "status": "error",
+            "message": "Houve um erro técnico ao salvar seu novo score."
         }
         
 @tool

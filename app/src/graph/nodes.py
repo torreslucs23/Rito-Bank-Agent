@@ -6,10 +6,11 @@ from app.src.llm.credit_llm import credit_llm
 from app.src.llm.triage_llm import  triage_llm
 from app.src.llm.base_llm import llm
 from app.src.llm.currency_llm import currency_llm
+from app.src.llm.interview_llm import interview_llm
 from langgraph.graph.message import add_messages
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from langgraph.graph import END
-from app.src.llm.tools import process_limit_increase_request, save_cpf, save_birth_date, get_exchange_rate_tool
+from app.src.llm.tools import process_limit_increase_request, save_cpf, save_birth_date, get_exchange_rate_tool, submit_credit_interview
 from app.src.services.credit_service import CreditService
 from app.src.services.user_service import authenticate_user
 
@@ -31,6 +32,9 @@ class AgentState(TypedDict):
     
     #flow control
     next_agent: Optional[dict]
+    
+    #interview credit
+    credit_interview: bool
 
     
 
@@ -76,10 +80,10 @@ def supervisor_node(state: AgentState) -> AgentState:
     if not state['authenticated']:
         state['next_agent'] = 'triage_agent'
         return state
+    if state['credit_interview']:
+        state['next_agent'] = 'interview_agent'
+        return state
     
-    # ... (início da função supervisor_node) ...
-
-    # 1. ATUALIZAÇÃO NO PROMPT
     system_prompt = f""" {system_prompt_bank}
 
 Analyze the customer's message:
@@ -97,6 +101,12 @@ if the customer explicitly talks about "limit", "credit increase", "score", "cre
 - "liberar mais crédito"
 or other similar variations → respond ONLY: CREDIT
 
+if the customer explicitly wants to increase your credit with an interview, if he says something like:
+- "quero fazer uma entrevista para aumentar meu limite"
+- "gostaria de responder algumas perguntas para aumentar meu limite"
+- "preciso aumentar meu limite de crédito"
+→ respond ONLY: INTERVIEW
+
 If the customer wants to EXIT, quit, say goodbye or end the conversation:
 - "sair"
 - "tchau"
@@ -112,12 +122,11 @@ Customer's message: "{recent_messages[-1].content if recent_messages else ''}"
 
 {system_prompt_final_instruction}
 
-Respond with ONLY ONE WORD (CURRENCY, CREDIT, EXIT or DIRECT):"""
+Respond with ONLY ONE WORD (CURRENCY, CREDIT, INTERVIEW, EXIT or DIRECT):"""
 
     response = llm.invoke([SystemMessage(content=system_prompt), *recent_messages])
     decision = response.content.strip().upper()
     
-    # 2. LÓGICA DE ROTEAMENTO E LIMPEZA
     
     if "CURRENCY" in decision:
         state['next_agent'] = 'currency_agent'
@@ -125,6 +134,10 @@ Respond with ONLY ONE WORD (CURRENCY, CREDIT, EXIT or DIRECT):"""
     
     elif "CREDIT" in decision:
         state['next_agent'] = 'credit_agent'
+        return state
+    
+    elif "INTERVIEW" in decision:
+        state['next_agent'] = 'interview_agent'
         return state
 
     elif "EXIT" in decision:        
@@ -456,50 +469,52 @@ def credit_agent_node(state: AgentState) -> AgentState:
 
     last_message = messages[-1]
 
-    if isinstance(last_message, ToolMessage) and last_message.tool_call_id == "process_limit_increase_request":
-        
+    if isinstance(last_message, ToolMessage):
+
         tool_output = last_message.content.lower()
-        is_rejected = "rejeitado" in tool_output
         
-        if is_rejected:
-            system_prompt = f"""
-            {system_prompt_bank}
-            You are a Credit Agent.
+        if "status" in tool_output and ("aprovado" in tool_output or "rejeitado" in tool_output):
+            is_rejected = "rejeitado" in tool_output
             
-            The customer's limit increase request was REJECTED by the system.
-            
-            YOUR MISSION NOW:
-            1. Inform the rejection in an empathetic and professional manner.
-            2. MANDATORY: Offer to conduct a "Credit Profile Interview" YOURSELF right now.
-               - Explain that you can collect updated financial data (income, expenses) to recalculate their score immediately.
-               - Use a phrasing like: "If you wish, I can start a profile analysis interview now to try to adjust your score."
-            3. If the customer agrees (says YES), respond exactly: "Vou iniciar a entrevista agora."
-            
-            {system_prompt_final_instruction}
-            
-            Respond in Portuguese.
-            """
-        else:
-            system_prompt = f"""
-            {system_prompt_bank}
-            You are a Credit Agent.
-            The request was APPROVED.
-            
-            YOUR MISSION:
-            1. Congratulate the customer.
-            2. Confirm the new limit.
-            3. Ask if you can help with anything else.
-            
-            {system_prompt_final_instruction}
-            
-            Respond in Portuguese.
-            """
-            
-        response = llm.invoke(
-            [SystemMessage(content=system_prompt), *messages[-10:]],
-            temperature=0.3
-        )
-        return {"messages": [response]}
+            if is_rejected:
+                system_prompt = f"""
+                {system_prompt_bank}
+                You are a Credit Agent.
+                
+                The customer's limit increase request was REJECTED by the system.
+                
+                YOUR MISSION NOW:
+                1. Inform the rejection in an empathetic and professional manner.
+                2. MANDATORY: Offer to conduct a "Credit Profile Interview" YOURSELF right now.
+                - Explain that you can collect updated financial data (income, expenses) to recalculate their score immediately.
+                - Use a phrasing like: "If you wish, I can start a profile analysis interview now to try to adjust your score."
+                3. If the customer agrees (says YES), respond exactly: "Vou iniciar a entrevista agora."
+                
+                {system_prompt_final_instruction}
+                
+                Respond in Portuguese.
+                """
+            else:
+                system_prompt = f"""
+                {system_prompt_bank}
+                You are a Credit Agent.
+                The request was APPROVED.
+                
+                YOUR MISSION:
+                1. Congratulate the customer.
+                2. Confirm the new limit.
+                3. Ask if you can help with anything else.
+                
+                {system_prompt_final_instruction}
+                
+                Respond in Portuguese.
+                """
+                
+            response = llm.invoke(
+                [SystemMessage(content=system_prompt), *messages[-10:]],
+                temperature=0.3
+            )
+            return {"messages": [response]}
 
     else:
                 
@@ -520,6 +535,7 @@ def credit_agent_node(state: AgentState) -> AgentState:
         
         3. If the customer accepts to go to the interview (after a previous rejection):
            - Just say you will transfer them.
+        
            
         Be direct and professional. If he asks something about the information, some tip, prepare a good response.
         
@@ -534,4 +550,87 @@ def credit_agent_node(state: AgentState) -> AgentState:
             max_tokens=300
         )
         
+        
         return {"messages": [response]}
+    
+
+def interview_agent_node(state: AgentState) -> AgentState:
+    
+    messages = state["messages"]
+    cpf_user = state.get("cpf_input", "Unknown")
+    last_message = messages[-1]
+
+    if isinstance(last_message, ToolMessage):
+        
+        import json
+        try:
+            content = last_message.content
+            if isinstance(content, str):
+                data = json.loads(content)
+            else:
+                data = content
+            new_score = data.get("new_score", "N/A")
+        except:
+            new_score = "atualizado"
+
+        system_prompt = f"""
+        {system_prompt_bank}
+        
+        The interview was successful! The customer's new score is {new_score}.
+        
+        YOUR MISSION:
+        1. Thank them for their cooperation.
+        2. Inform that the score has been recalculated.
+        3. Say: "Agora vou transferir você de volta para o Agente de Crédito para reanalisar seu pedido de limite."
+        4. IMPORTANT: Use the keyword "REDIRECT_CREDIT" at the end of the sentence.
+        
+        {system_prompt_final_instruction}
+        REMEMBER: Respond in Portuguese.
+        """
+        
+        response = llm.invoke([SystemMessage(content=system_prompt), *messages[-30:]])
+        
+        return {
+            "messages": [response],
+            "credit_interview": False
+        }
+
+    else:
+        interview_llm_with_tools = interview_llm.bind_tools([submit_credit_interview])
+        
+        system_prompt = f"""
+        {system_prompt_bank}
+        
+        You are the Credit Interview Agent at Rito Bank.
+        YOUR OBJECTIVE: Collect data to fill the `submit_credit_interview` tool.
+        
+        REQUIRED DATA (Ask ONE at a time, conversationally):
+        1. Monthly Income (R$)
+        2. Employment Type (Formal, Autonomous or Unemployed)
+        3. Fixed Monthly Expenses (R$)
+        4. Number of Dependents
+        5. Has active debts? (Yes/No)
+        
+        INSTRUCTIONS:
+        - Customer CPF: {cpf_user}
+        - DO NOT ask for all data at once. Be patient.
+        - If the user has already answered everything, CALL THE TOOL `submit_credit_interview`.
+        
+        If the customer wants to quit: respond with "ENCERRAR".
+        
+        {system_prompt_final_instruction}
+        REMEMBER: Respond in Portuguese.
+        """
+    
+        response = interview_llm_with_tools.invoke([SystemMessage(content=system_prompt), *messages[-30:]])
+        
+        if "ENCERRAR" in response.content.upper():
+            return {
+                "messages": [AIMessage(content="Entendido. Encerrando o processo da entrevista")],
+                "credit_interview": False
+            }
+
+        return {
+            "messages": [response],
+            "credit_interview": True
+        }

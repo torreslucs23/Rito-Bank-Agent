@@ -93,6 +93,72 @@ class CreditService:
         except Exception as e:
             logger.error(f"Erro ao buscar dados do cliente: {e}")
             return None
+        
+    def calculate_and_update_score(self, cpf: str, renda: float, emprego: str, despesas: float, dependentes: int, tem_dividas: bool) -> dict:
+        """
+        Calcula o novo score baseado na fórmula ponderada e atualiza o CSV.
+        """
+        try:
+            PESO_RENDA = 30
+            PESO_EMPREGO = {
+                "formal": 300,
+                "autonomo": 200,
+                "autônomo": 200,
+                "desempregado": 0
+            }
+            PESO_DEPENDENTES = {
+                0: 100, 1: 80, 2: 60
+            }
+            def get_peso_dep(n):
+                return PESO_DEPENDENTES.get(n, 30)
+
+            PESO_DIVIDAS = { True: -100, False: 100 }
+
+            fator_financeiro = (renda / (despesas + 1)) * PESO_RENDA
+            
+            emprego_clean = emprego.lower().strip()
+            score_emprego = PESO_EMPREGO.get(emprego_clean, 0)
+            
+            score_dependentes = get_peso_dep(dependentes)
+            score_dividas = PESO_DIVIDAS[tem_dividas]
+
+            novo_score_raw = fator_financeiro + score_emprego + score_dependentes + score_dividas
+            novo_score = int(max(0, min(1000, novo_score_raw)))
+            logger.info(f"Cálculo de Score para CPF {cpf}: {novo_score} (Raw: {novo_score_raw})")
+            success = self._update_client_field(cpf, 'score', novo_score)
+
+            return {
+                "success": success,
+                "new_score": novo_score,
+                "details": f"Renda: {fator_financeiro:.0f}, Emprego: {score_emprego}, Dep: {score_dependentes}, Dívidas: {score_dividas}"
+            }
+
+        except Exception as e:
+            logger.error(f"Erro ao calcular score: {e}")
+            return {"success": False, "error": str(e)}
+
+    def _update_client_field(self, cpf: str, field: str, value) -> bool:
+        """Método genérico para atualizar um campo no clients.csv"""
+        try:
+            if not self.clients_path.exists():
+                return False
+
+            df = pd.read_csv(self.clients_path, dtype=str)
+            
+            cpf_clean = str(cpf).replace('.', '').replace('-', '').strip()
+            df['cpf_clean'] = df['cpf'].astype(str).str.replace(r'\.0$', '', regex=True).str.replace('.', '', regex=False).str.replace('-', '', regex=False).str.strip()
+            
+            if cpf_clean not in df['cpf_clean'].values:
+                return False
+            
+            df.loc[df['cpf_clean'] == cpf_clean, field] = str(value)
+            
+            df = df.drop(columns=['cpf_clean'])
+            df.to_csv(self.clients_path, index=False)
+            return True
+        except Exception as e:
+            logger.error(f"Erro ao atualizar CSV: {e}")
+            return False
 
     def _get_max_allowed_limit(self, score: int) -> float:
         """Lê o CSV de regras e retorna o limite máximo para o score dado."""
