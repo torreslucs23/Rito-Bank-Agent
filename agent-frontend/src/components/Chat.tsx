@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Loader2 } from 'lucide-react';
+import { Send, User, Loader2 } from 'lucide-react';
 
 type Message = {
   id: string;
@@ -90,7 +90,7 @@ export function Chat() {
         <div className="relative">
           <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center overflow-hidden border-2 border-green-900">
 
-            <Bot className="w-7 h-7 text-bank-blue" />
+            <img src="rito.png" alt="Rito" />
           </div>
           <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-900 rounded-full border-2 border-white"></span>
         </div>
@@ -111,8 +111,8 @@ export function Chat() {
           >
             <div className={`flex items-end gap-2 max-w-[80%]`}>
               {msg.sender === 'bot' && (
-                <div className="w-6 h-6 rounded-full bg-bank-blue flex items-center justify-center shrink-0">
-                  <Bot size={14} className="text-white" />
+                <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center shrink-0 overflow-hidden">
+                  <img src="rito.png" alt="Rito" className="w-full h-full object-cover" />
                 </div>
               )}
               
