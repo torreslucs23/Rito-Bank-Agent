@@ -117,7 +117,7 @@ Respond with ONLY ONE WORD (CURRENCY or DIRECT):"""
         LANGUAGE: Respond STRICTLY in Portuguese (PT-BR).
         """
 
-        direct_response = llm.invoke([SystemMessage(content=direct_prompt), *recent_messages], temperature=0.2, max_tokens=100)
+        direct_response = llm.invoke([SystemMessage(content=direct_prompt), *recent_messages], temperature=0.4, max_tokens=100)
         
         state['messages'].append(AIMessage(content=direct_response.content))
         state['next_agent'] = END
@@ -373,6 +373,6 @@ def currency_agent_node(state: AgentState) -> AgentState:
     REMEMBER: Respond in Portuguese.
     """
 
-    response = currency_llm.invoke([SystemMessage(content=system_prompt), *messages], temperature=0.1)
+    response = currency_llm.invoke([SystemMessage(content=system_prompt), *messages], temperature=0.3)
     return {"messages": [response]}
 

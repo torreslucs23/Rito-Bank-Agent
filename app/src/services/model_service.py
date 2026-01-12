@@ -10,7 +10,7 @@ state1 = {
     "messages": [],
     "cpf_input": None,
     "birth_date": None,
-    "authenticated": False,
+    "authenticated": True,
     "authentication_attempts": 0,
     "next_agent": None,
     "finish": False,
