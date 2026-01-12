@@ -1,12 +1,14 @@
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
+from langgraph.prebuilt import ToolNode
+
+from app.src.graph.nodes.credit import credit_agent_node
+from app.src.graph.nodes.currency import currency_agent_node
+from app.src.graph.nodes.interview import interview_agent_node
 from app.src.graph.nodes.supervisor import supervisor_node
 from app.src.graph.nodes.triage import triage_node
-from app.src.graph.nodes.currency import currency_agent_node
-from app.src.graph.nodes.credit import credit_agent_node
-from app.src.graph.nodes.interview import interview_agent_node
-from langgraph.prebuilt import ToolNode, tools_condition
 from app.src.graph.state import AgentState
 from app.src.llm.tools import *
+
 
 def build_graph():
     workflow = StateGraph(AgentState)
@@ -15,13 +17,21 @@ def build_graph():
     workflow.add_node("triage_agent", triage_node)
     workflow.add_node("currency_agent", currency_agent_node)
     workflow.add_node("currency_tools", ToolNode(tools=[get_exchange_rate_tool]))
-    
+
     workflow.add_node("credit_agent", credit_agent_node)
-    
-    workflow.add_node("credit_tools", ToolNode(tools=[process_limit_increase_request, get_score_and_or_limit, submit_credit_interview]))
-    
+
+    workflow.add_node(
+        "credit_tools",
+        ToolNode(
+            tools=[
+                process_limit_increase_request,
+                get_score_and_or_limit,
+                submit_credit_interview,
+            ]
+        ),
+    )
+
     workflow.add_node("interview_agent", interview_agent_node)
-    
 
     workflow.set_entry_point("supervisor")
 
@@ -34,29 +44,21 @@ def build_graph():
             "credit_agent": "credit_agent",
             "interview_agent": "interview_agent",
             "finish": END,
-            END: END
-        }
+            END: END,
+        },
     )
-    
+
     workflow.add_conditional_edges(
         "currency_agent",
-        route_currency_logic, 
-        {
-            "currency_tools": "currency_tools",
-            END: END 
-        }
+        route_currency_logic,
+        {"currency_tools": "currency_tools", END: END},
     )
     workflow.add_edge("currency_tools", "currency_agent")
 
     workflow.add_conditional_edges(
-        "triage_agent",
-        route_from_triage,
-        {
-            "supervisor": "supervisor",
-            END: END
-        }
+        "triage_agent", route_from_triage, {"supervisor": "supervisor", END: END}
     )
-    
+
     workflow.add_conditional_edges(
         "credit_agent",
         route_credit_logic,
@@ -64,35 +66,33 @@ def build_graph():
             "credit_tools": "credit_tools",
             "supervisor": "supervisor",
             "interview_agent": END,
-            END: END
-        }
+            END: END,
+        },
     )
-    
+
     workflow.add_conditional_edges(
-    "interview_agent",
-    route_interview_logic,
-    {
-        "interview_tools": "credit_tools",
-        "credit_agent": "credit_agent",
-        END: END
-    }
-)
+        "interview_agent",
+        route_interview_logic,
+        {"interview_tools": "credit_tools", "credit_agent": "credit_agent", END: END},
+    )
     workflow.add_edge("credit_tools", "credit_agent")
 
     return workflow.compile()
 
+
 def route_credit_logic(state: AgentState) -> str:
     messages = state["messages"]
     last_message = messages[-1]
-    
+
     if hasattr(last_message, "tool_calls") and len(last_message.tool_calls) > 0:
         return "credit_tools"
 
     content = last_message.content.lower()
     if "transferir" in content or "entrevista" in content:
         return "interview_agent"
-        
+
     return END
+
 
 def route_from_supervisor(state: AgentState) -> str:
     if state.get("finish"):
@@ -105,10 +105,10 @@ def route_from_supervisor(state: AgentState) -> str:
     return next_agent
 
 
-
 def route_from_triage(state: AgentState) -> str:
     """Triage always goes back to supervisor"""
     return END
+
 
 def route_currency_logic(state: AgentState) -> str:
     """
@@ -120,16 +120,21 @@ def route_currency_logic(state: AgentState) -> str:
 
     if hasattr(last_message, "tool_calls") and len(last_message.tool_calls) > 0:
         return "currency_tools"
-    return END 
+    return END
+
 
 def route_interview_logic(state: AgentState) -> str:
     last_message = state["messages"][-1]
-    
+
     if hasattr(last_message, "tool_calls") and len(last_message.tool_calls) > 0:
         return "interview_tools"
 
     content = last_message.content.upper()
-    if "REDIRECT_CREDIT" in content or "TRANSFERIR" in content or "REANALISAR" in content:
+    if (
+        "REDIRECT_CREDIT" in content
+        or "TRANSFERIR" in content
+        or "REANALISAR" in content
+    ):
         return "credit_agent"
-        
+
     return END

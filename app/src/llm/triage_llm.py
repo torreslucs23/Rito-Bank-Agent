@@ -1,9 +1,9 @@
 import os
+
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
+
 from .tools import *
-
-
 
 load_dotenv()
 
@@ -15,4 +15,3 @@ triage_llm = ChatOpenAI(
     temperature=0.5,
     api_key=api_key,
 ).bind_tools([save_cpf, save_birth_date, authenticate_customer])
-

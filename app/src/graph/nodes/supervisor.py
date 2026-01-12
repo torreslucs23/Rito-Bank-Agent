@@ -1,31 +1,33 @@
 import json
+import logging
+
 from langchain_core.messages import AIMessage, SystemMessage
 from langgraph.graph import END
 
 from app.src.graph.state import AgentState
 from app.src.llm.base_llm import llm
 from app.src.llm.prompts import SYSTEM_PROMPT_BANK, SYSTEM_PROMPT_FINAL_INSTRUCTION
-import logging
 
 logger = logging.getLogger(__name__)
+
 
 def supervisor_node(state: AgentState) -> AgentState:
     """
     Supervisor: analyzes message and decides whether to call triage or respond directly
     """
     logger.info("Entering Supervisor Node")
-    
+
     messages = state["messages"]
     recent_messages = messages[-20:] if len(messages) > 20 else messages
-    
-    if not state.get('authenticated'):
-        state['next_agent'] = 'triage_agent'
+
+    if not state.get("authenticated"):
+        state["next_agent"] = "triage_agent"
         return state
-    
-    if state.get('credit_interview'):
-        state['next_agent'] = 'interview_agent'
+
+    if state.get("credit_interview"):
+        state["next_agent"] = "interview_agent"
         return state
-    
+
     system_prompt = f""" {SYSTEM_PROMPT_BANK}
 
 Analyze the customer's message:
@@ -60,7 +62,7 @@ Or similar variations → respond ONLY: EXIT
 
 For ANY other message (greetings, questions, farewells, etc) → respond ONLY: DIRECT
 
-Customer's message: "{recent_messages[-1].content if recent_messages else ''}"
+Customer's message: "{recent_messages[-1].content if recent_messages else ""}"
 
 {SYSTEM_PROMPT_FINAL_INSTRUCTION}
 
@@ -70,37 +72,41 @@ Respond with ONLY ONE WORD (CURRENCY, CREDIT, INTERVIEW, EXIT or DIRECT):"""
         response = llm.invoke([SystemMessage(content=system_prompt), *recent_messages])
     except Exception as e:
         logger.error(f"Error in Supervisor LLM invocation: {e}")
-        response = AIMessage(content="Desculpe, ocorreu um erro ao processar sua solicitação. Tente novamente mais tarde.")
-        
+        response = AIMessage(
+            content="Desculpe, ocorreu um erro ao processar sua solicitação. Tente novamente mais tarde."
+        )
+
     decision = response.content.strip().upper()
-    
+
     if "CURRENCY" in decision:
-        state['next_agent'] = 'currency_agent'
-        return state
-    
-    elif "CREDIT" in decision:
-        state['next_agent'] = 'credit_agent'
-        return state
-    
-    elif "INTERVIEW" in decision:
-        state['next_agent'] = 'interview_agent'
+        state["next_agent"] = "currency_agent"
         return state
 
-    elif "EXIT" in decision:        
-        goodbye_message = AIMessage(content="O Rito Bank agradece seu contato! Sessão encerrada com segurança. Até a próxima!")
-        
+    elif "CREDIT" in decision:
+        state["next_agent"] = "credit_agent"
+        return state
+
+    elif "INTERVIEW" in decision:
+        state["next_agent"] = "interview_agent"
+        return state
+
+    elif "EXIT" in decision:
+        goodbye_message = AIMessage(
+            content="O Rito Bank agradece seu contato! Sessão encerrada com segurança. Até a próxima!"
+        )
+
         return {
             "messages": [goodbye_message],
             "authenticated": False,
             "cpf_input": None,
             "birth_date": None,
-            "next_agent": END
+            "next_agent": END,
         }
-    
+
     else:
         state_for_prompt = state.copy()
         state_for_prompt.pop("messages", None)
-    
+
         state_context_str = json.dumps(state_for_prompt, indent=2, ensure_ascii=False)
         direct_prompt = f"""{SYSTEM_PROMPT_BANK}
         
@@ -118,11 +124,17 @@ Respond with ONLY ONE WORD (CURRENCY, CREDIT, INTERVIEW, EXIT or DIRECT):"""
         """
 
         try:
-            direct_response = llm.invoke([SystemMessage(content=direct_prompt), *recent_messages], temperature=0.5, max_tokens=100)
+            direct_response = llm.invoke(
+                [SystemMessage(content=direct_prompt), *recent_messages],
+                temperature=0.5,
+                max_tokens=100,
+            )
         except Exception as e:
             logger.error(f"Error in Supervisor LLM invocation: {e}")
-            direct_response = AIMessage(content="Desculpe, ocorreu um erro ao processar sua solicitação. Tente novamente mais tarde.")
-        
-        state['messages'].append(AIMessage(content=direct_response.content))
-        state['next_agent'] = END
+            direct_response = AIMessage(
+                content="Desculpe, ocorreu um erro ao processar sua solicitação. Tente novamente mais tarde."
+            )
+
+        state["messages"].append(AIMessage(content=direct_response.content))
+        state["next_agent"] = END
         return state

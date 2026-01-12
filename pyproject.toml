@@ -17,3 +17,62 @@ dependencies = [
     "sqlmodel>=0.0.31",
     "uvicorn>=0.40.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.5.1",
+    "ruff>=0.14.11",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "site-packages",
+    "venv",
+]
+
+[tool.ruff.lint]
+# Regras para ativar:
+# E: pycodestyle errors (erros de estilo padrão)
+# W: pycodestyle warnings
+# F: Pyflakes (erros lógicos, variáveis não usadas, imports quebrados)
+# I: isort (organização automática de imports - MUITO IMPORTANTE)
+# B: flake8-bugbear (pega bugs comuns)
+select = ["E", "W", "F", "I", "B"]
+ignore = ["F403", "F405", "E501"]
+
+
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true

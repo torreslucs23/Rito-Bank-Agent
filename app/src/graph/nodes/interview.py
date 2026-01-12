@@ -1,21 +1,23 @@
 import json
-from langchain_core.messages import SystemMessage, ToolMessage, AIMessage
+import logging
+
+from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 
 from app.src.graph.state import AgentState
 from app.src.llm.base_llm import llm
 from app.src.llm.interview_llm import interview_llm
-from app.src.llm.tools import submit_credit_interview
 from app.src.llm.prompts import SYSTEM_PROMPT_BANK, SYSTEM_PROMPT_FINAL_INSTRUCTION
-import logging
+from app.src.llm.tools import submit_credit_interview
 
 logger = logging.getLogger(__name__)
+
 
 def interview_agent_node(state: AgentState) -> AgentState:
     """
     Interview Agent: Conducts financial interview
     """
     logger.info("Entering Interview Agent Node")
-    
+
     messages = state["messages"]
     cpf_user = state.get("cpf_input", "Unknown")
     last_message = messages[-1]
@@ -42,19 +44,20 @@ def interview_agent_node(state: AgentState) -> AgentState:
         REMEMBER: Respond in Portuguese.
         """
         try:
-            response = llm.invoke([SystemMessage(content=system_prompt), *messages[-30:]])
+            response = llm.invoke(
+                [SystemMessage(content=system_prompt), *messages[-30:]]
+            )
         except Exception as e:
             logger.error(f"Error in Interview Agent LLM invocation: {e}")
-            response = AIMessage(content="Desculpe, ocorreu um erro ao processar sua solicitação. Tente novamente mais tarde.")
-        
-        return {
-            "messages": [response],
-            "credit_interview": False
-        }
+            response = AIMessage(
+                content="Desculpe, ocorreu um erro ao processar sua solicitação. Tente novamente mais tarde."
+            )
+
+        return {"messages": [response], "credit_interview": False}
 
     else:
         interview_llm_with_tools = interview_llm.bind_tools([submit_credit_interview])
-        
+
         system_prompt = f"""{SYSTEM_PROMPT_BANK}
         
         You are the Credit Interview Agent.
@@ -77,20 +80,23 @@ def interview_agent_node(state: AgentState) -> AgentState:
         {SYSTEM_PROMPT_FINAL_INSTRUCTION}
         REMEMBER: Respond in Portuguese.
         """
-    
+
         try:
-            response = interview_llm_with_tools.invoke([SystemMessage(content=system_prompt), *messages[-30:]])
+            response = interview_llm_with_tools.invoke(
+                [SystemMessage(content=system_prompt), *messages[-30:]]
+            )
         except Exception as e:
             logger.error(f"Error in Interview Agent LLM invocation: {e}")
-            response = AIMessage(content="Desculpe, ocorreu um erro ao processar sua solicitação. Tente novamente mais tarde.")
-        
+            response = AIMessage(
+                content="Desculpe, ocorreu um erro ao processar sua solicitação. Tente novamente mais tarde."
+            )
+
         if "ENCERRAR" in response.content.upper():
             return {
-                "messages": [AIMessage(content="Entendido. Encerrando o processo da entrevista")],
-                "credit_interview": False
+                "messages": [
+                    AIMessage(content="Entendido. Encerrando o processo da entrevista")
+                ],
+                "credit_interview": False,
             }
 
-        return {
-            "messages": [response],
-            "credit_interview": True
-        }
+        return {"messages": [response], "credit_interview": True}

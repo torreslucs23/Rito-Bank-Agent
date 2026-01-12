@@ -1,5 +1,6 @@
 import logging.config
 
+
 def setup_logging():
     LOGGING_CONFIG = {
         "version": 1,
