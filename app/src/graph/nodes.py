@@ -31,13 +31,12 @@ class AgentState(TypedDict):
     
     #flow control
     next_agent: Optional[dict]
-    finish: bool
 
     
 
 system_prompt_bank = """
 You are a virtual assistant specialized in banking services. Your role is to help customers with their questions and needs related to banking services. You are always brief in your messages, without making too much small talk. 
-Your name is Rito. Always identify yourself as Rito and say you are the bank agent assistant, in the first message of the conversation.
+Your name is Rito. Always identify yourself as Rito when the user asks for your name or who you are.
 
 IMPORTANT: Always provide your responses in Portuguese (Brazilian Portuguese).
 """
@@ -59,6 +58,7 @@ When you send a message, try to verify if the customer is satisfied with your an
 might need. If they seem satisfied, politely ask if there is anything else you can assist with before ending the conversation.
 You can vary your closing phrases to keep the conversation engaging and friendly.
 avoid to use always "Posso ajudar com mais alguma coisa?" in the end of your responses.
+You can use some emojis to make the conversation more friendly, but don't overuse them. Use sometimes.
 Always answer in portuguese (Brazilian Portuguese).
 """
     
@@ -77,11 +77,12 @@ def supervisor_node(state: AgentState) -> AgentState:
         state['next_agent'] = 'triage_agent'
         return state
     
+    # ... (início da função supervisor_node) ...
+
+    # 1. ATUALIZAÇÃO NO PROMPT
     system_prompt = f""" {system_prompt_bank}
 
 Analyze the customer's message:
-
-
 
 If the customer explicitly says they want to know the value of a currency, conversion or something similar:
 - "qual a cotação do dólar?"
@@ -96,6 +97,14 @@ if the customer explicitly talks about "limit", "credit increase", "score", "cre
 - "liberar mais crédito"
 or other similar variations → respond ONLY: CREDIT
 
+If the customer wants to EXIT, quit, say goodbye or end the conversation:
+- "sair"
+- "tchau"
+- "encerrar atendimento"
+- "obrigado, tchau"
+- "fechar"
+- "valeu, flw"
+Or similar variations → respond ONLY: EXIT
 
 For ANY other message (greetings, questions, farewells, etc) → respond ONLY: DIRECT
 
@@ -103,12 +112,12 @@ Customer's message: "{recent_messages[-1].content if recent_messages else ''}"
 
 {system_prompt_final_instruction}
 
-Respond with ONLY ONE WORD (CURRENCY, CREDIT or DIRECT):"""
+Respond with ONLY ONE WORD (CURRENCY, CREDIT, EXIT or DIRECT):"""
 
     response = llm.invoke([SystemMessage(content=system_prompt), *recent_messages])
     decision = response.content.strip().upper()
     
-
+    # 2. LÓGICA DE ROTEAMENTO E LIMPEZA
     
     if "CURRENCY" in decision:
         state['next_agent'] = 'currency_agent'
@@ -116,6 +125,17 @@ Respond with ONLY ONE WORD (CURRENCY, CREDIT or DIRECT):"""
     
     elif "CREDIT" in decision:
         state['next_agent'] = 'credit_agent'
+        return state
+
+    elif "EXIT" in decision:        
+        goodbye_message = AIMessage(content="O Rito Bank agradece seu contato! Sessão encerrada com segurança. Até a próxima!")
+        state['messages'] = [goodbye_message]
+        
+        state['authenticated'] = False
+        state['cpf_input'] = None
+        state['birth_date'] = None
+        state['next_agent'] = END
+        
         return state
     
     else:
