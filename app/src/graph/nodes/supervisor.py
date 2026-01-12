@@ -5,11 +5,16 @@ from langgraph.graph import END
 from app.src.graph.state import AgentState
 from app.src.llm.base_llm import llm
 from app.src.llm.prompts import SYSTEM_PROMPT_BANK, SYSTEM_PROMPT_FINAL_INSTRUCTION
+import logging
+
+logger = logging.getLogger(__name__)
 
 def supervisor_node(state: AgentState) -> AgentState:
     """
     Supervisor: analyzes message and decides whether to call triage or respond directly
     """
+    logger.info("Entering Supervisor Node")
+    
     messages = state["messages"]
     recent_messages = messages[-20:] if len(messages) > 20 else messages
     
@@ -61,10 +66,14 @@ Customer's message: "{recent_messages[-1].content if recent_messages else ''}"
 
 Respond with ONLY ONE WORD (CURRENCY, CREDIT, INTERVIEW, EXIT or DIRECT):"""
 
-    response = llm.invoke([SystemMessage(content=system_prompt), *recent_messages])
+    try:
+        response = llm.invoke([SystemMessage(content=system_prompt), *recent_messages])
+    except Exception as e:
+        logger.error(f"Error in Supervisor LLM invocation: {e}")
+        response = AIMessage(content="Desculpe, ocorreu um erro ao processar sua solicitação. Tente novamente mais tarde.")
+        
     decision = response.content.strip().upper()
     
-    # Lógica de Roteamento
     if "CURRENCY" in decision:
         state['next_agent'] = 'currency_agent'
         return state
@@ -89,7 +98,6 @@ Respond with ONLY ONE WORD (CURRENCY, CREDIT, INTERVIEW, EXIT or DIRECT):"""
         }
     
     else:
-        # Chat Geral
         state_for_prompt = state.copy()
         state_for_prompt.pop("messages", None)
     
@@ -109,7 +117,11 @@ Respond with ONLY ONE WORD (CURRENCY, CREDIT, INTERVIEW, EXIT or DIRECT):"""
         {SYSTEM_PROMPT_FINAL_INSTRUCTION}
         """
 
-        direct_response = llm.invoke([SystemMessage(content=direct_prompt), *recent_messages], temperature=0.5, max_tokens=100)
+        try:
+            direct_response = llm.invoke([SystemMessage(content=direct_prompt), *recent_messages], temperature=0.5, max_tokens=100)
+        except Exception as e:
+            logger.error(f"Error in Supervisor LLM invocation: {e}")
+            direct_response = AIMessage(content="Desculpe, ocorreu um erro ao processar sua solicitação. Tente novamente mais tarde.")
         
         state['messages'].append(AIMessage(content=direct_response.content))
         state['next_agent'] = END

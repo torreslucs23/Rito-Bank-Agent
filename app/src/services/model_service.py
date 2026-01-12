@@ -1,6 +1,5 @@
 from fastapi import HTTPException
 from datetime import date
-from app.src.models.AgentStateModel import AgentStateModel
 from app.src.llm.base_llm import llm
 from app.src.core.app_state import app_state
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
@@ -16,7 +15,7 @@ state1 = {
     "credit_interview": False
 }
 
-async def get_model_message(query: str) -> AgentStateModel | str:
+async def get_model_message(query: str) -> str:
     global state1
 
     state1["messages"].append(HumanMessage(content=query))

@@ -1,5 +1,11 @@
 from langgraph.graph import StateGraph, END
-from app.src.graph.nodes import *
+from app.src.graph.nodes.supervisor import supervisor_node
+from app.src.graph.nodes.triage import triage_node
+from app.src.graph.nodes.currency import currency_agent_node
+from app.src.graph.nodes.credit import credit_agent_node
+from app.src.graph.nodes.interview import interview_agent_node
+from langgraph.prebuilt import ToolNode, tools_condition
+from app.src.graph.state import AgentState
 from app.src.llm.tools import *
 
 def build_graph():
@@ -66,8 +72,8 @@ def build_graph():
     "interview_agent",
     route_interview_logic,
     {
-        "interview_tools": "credit_tools", # Reusando o nó de tools (certifique-se que ele tem a tool nova)
-        "credit_agent": "credit_agent",    # O LOOP MÁGICO
+        "interview_tools": "credit_tools",
+        "credit_agent": "credit_agent",
         END: END
     }
 )
