@@ -6,7 +6,7 @@ chat_router = APIRouter()
 
 @chat_router.post("/message")
 async def send_message(query: str):
-    try:
-        return {"response": await get_model_message(query)}
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro interno do servidor")
+    # try:
+    return {"response": await get_model_message(query)}
+    # except Exception as e:
+        # raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro interno do servidor")

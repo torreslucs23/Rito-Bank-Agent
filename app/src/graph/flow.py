@@ -1,5 +1,6 @@
 from langgraph.graph import StateGraph, END
 from app.src.graph.nodes import *
+from app.src.llm.tools import *
 
 def build_graph():
     workflow = StateGraph(AgentState)
@@ -8,6 +9,10 @@ def build_graph():
     workflow.add_node("triage_agent", triage_node)
     workflow.add_node("currency_agent", currency_agent_node)
     workflow.add_node("currency_tools", ToolNode(tools=[get_exchange_rate_tool]))
+    
+    workflow.add_node("credit_agent", credit_agent_node)
+    
+    workflow.add_node("credit_tools", ToolNode(tools=[process_limit_increase_request, get_score_and_or_limit]))
 
     workflow.set_entry_point("supervisor")
 
@@ -17,6 +22,7 @@ def build_graph():
         {
             "triage_agent": "triage_agent",
             "currency_agent": "currency_agent",
+            "credit_agent": "credit_agent",
             "finish": END,
             END: END
         }
@@ -40,8 +46,33 @@ def build_graph():
             END: END
         }
     )
+    
+    workflow.add_conditional_edges(
+        "credit_agent",
+        route_credit_logic,
+        {
+            "credit_tools": "credit_tools",
+            "supervisor": "supervisor",
+            "interview_agent": END,
+            END: END
+        }
+    )
+    workflow.add_edge("credit_tools", "credit_agent")
 
     return workflow.compile()
+
+def route_credit_logic(state: AgentState) -> str:
+    messages = state["messages"]
+    last_message = messages[-1]
+    
+    if hasattr(last_message, "tool_calls") and len(last_message.tool_calls) > 0:
+        return "credit_tools"
+
+    content = last_message.content.lower()
+    if "transferir" in content or "entrevista" in content:
+        return "interview_agent"
+        
+    return END
 
 def route_from_supervisor(state: AgentState) -> str:
     if state.get("finish"):

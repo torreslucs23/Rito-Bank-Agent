@@ -6,9 +6,69 @@ from datetime import datetime
 import pandas as pd
 import logging
 import time
+from app.src.services.credit_service import CreditService
+
+credit_service = CreditService()
 
 logger = logging.getLogger(__name__)
 
+
+@tool
+def get_score_and_or_limit(cpf: str) -> dict:
+    """
+    Retrieves the customer's score and current credit limit based on their CPF.
+    
+    Args:
+        cpf: Customer's CPF (numbers only, 11 digits) 
+    Returns:
+        Dict with score (int) and credit_limit (float)
+    """
+    try:
+        data = credit_service.get_client_data(cpf)
+        return {
+            "message": f"Score e limite recuperados para o CPF {cpf}.",
+            "score": data["score"],
+            "credit_limit": data["credit_limit"]
+        }
+    except Exception as e:
+        logger.error(f"Error retrieving score and limit for CPF {cpf}: {e}")
+        return {
+            "message": f"Erro ao recuperar dados para o CPF {cpf}",
+            "score": None,
+            "credit_limit": None
+        }
+
+
+@tool
+def process_limit_increase_request(cpf: str, current_limit: float, requested_limit: float, score: int) -> dict:
+    """
+    Processes a credit limit increase request based on the customer's score.
+    
+    Args:
+        cpf: Customer's CPF.
+        current_limit: Customer's current limit (float).
+        requested_limit: Desired new limit (float).
+        score: Customer's current credit score (int).
+        
+    Returns:
+        Dict with status ('aprovado' or 'rejeitado'), explanatory message and update flags.
+    """
+    logger.info(f"Tool chamada: process_limit_increase_request para CPF {cpf}")
+    
+    result = credit_service.process_limit_request(cpf, current_limit, requested_limit, score)
+    
+    if result["status"] == "aprovado":
+        update_success = credit_service.update_client_limit(cpf, requested_limit)
+        
+        if update_success:
+            result["message"] += " (Limite atualizado no sistema com sucesso!)"
+            result["limit_updated"] = True 
+            result["new_limit"] = requested_limit
+        else:
+            result["message"] += " (Aprovado, mas houve erro técnico ao salvar no banco de dados)."
+            result["limit_updated"] = False
+
+    return result
 
 @tool
 def save_cpf(cpf: str) -> dict:

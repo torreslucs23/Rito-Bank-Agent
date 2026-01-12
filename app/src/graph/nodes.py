@@ -2,15 +2,18 @@ import json
 from langgraph.prebuilt import ToolNode, tools_condition
 from typing import Annotated, TypedDict, Optional
 from langgraph.graph.message import add_messages
+from app.src.llm.credit_llm import credit_llm
 from app.src.llm.triage_llm import  triage_llm
 from app.src.llm.base_llm import llm
 from app.src.llm.currency_llm import currency_llm
 from langgraph.graph.message import add_messages
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from langgraph.graph import END
-from app.src.llm.tools import save_cpf, save_birth_date, get_exchange_rate_tool
+from app.src.llm.tools import process_limit_increase_request, save_cpf, save_birth_date, get_exchange_rate_tool
+from app.src.services.credit_service import CreditService
 from app.src.services.user_service import authenticate_user
 
+credit_service = CreditService()
 
 
 
@@ -50,6 +53,14 @@ You are now responsible for providing information about currency exchange. Respo
 
 IMPORTANT: Always provide your responses in Portuguese (Brazilian Portuguese).
 """
+
+system_prompt_final_instruction = """
+When you send a message, try to verify if the customer is satisfied with your answer and if they need any further assistance. If they do, offer to help with anything else they
+might need. If they seem satisfied, politely ask if there is anything else you can assist with before ending the conversation.
+You can vary your closing phrases to keep the conversation engaging and friendly.
+avoid to use always "Posso ajudar com mais alguma coisa?" in the end of your responses.
+Always answer in portuguese (Brazilian Portuguese).
+"""
     
     
 
@@ -79,11 +90,20 @@ If the customer explicitly says they want to know the value of a currency, conve
 - "quero saber a cotação da libra"
 Or similar variations → respond ONLY: CURRENCY
 
+if the customer explicitly talks about "limit", "credit increase", "score", "credit card":
+- "quero aumentar meu limite"
+- "qual meu limite atual?"
+- "liberar mais crédito"
+or other similar variations → respond ONLY: CREDIT
+
+
 For ANY other message (greetings, questions, farewells, etc) → respond ONLY: DIRECT
 
 Customer's message: "{recent_messages[-1].content if recent_messages else ''}"
 
-Respond with ONLY ONE WORD (CURRENCY or DIRECT):"""
+{system_prompt_final_instruction}
+
+Respond with ONLY ONE WORD (CURRENCY, CREDIT or DIRECT):"""
 
     response = llm.invoke([SystemMessage(content=system_prompt), *recent_messages])
     decision = response.content.strip().upper()
@@ -92,6 +112,10 @@ Respond with ONLY ONE WORD (CURRENCY or DIRECT):"""
     
     if "CURRENCY" in decision:
         state['next_agent'] = 'currency_agent'
+        return state
+    
+    elif "CREDIT" in decision:
+        state['next_agent'] = 'credit_agent'
         return state
     
     else:
@@ -113,11 +137,17 @@ Respond with ONLY ONE WORD (CURRENCY or DIRECT):"""
         2. **Be Natural:** Respond to the user's greeting, thanks, or random comment politely.
         3. **No Auth Block:** Do NOT ask for CPF/Authentication automatically. Only ask if the user requests a restricted service (like checking balance).
         4. **Style:** Be brief, professional, and warm.
+        
+        
+        Remember the services you have as an bank agent. You just have these services, if the user asks for them:
+        - consult the credit limit and score
+        - consult the currency exchange rates
+        - you can increase the customer's credit limit
 
-        LANGUAGE: Respond STRICTLY in Portuguese (PT-BR).
+        {system_prompt_final_instruction}
         """
 
-        direct_response = llm.invoke([SystemMessage(content=direct_prompt), *recent_messages], temperature=0.4, max_tokens=100)
+        direct_response = llm.invoke([SystemMessage(content=direct_prompt), *recent_messages], temperature=0.5, max_tokens=100)
         
         state['messages'].append(AIMessage(content=direct_response.content))
         state['next_agent'] = END
@@ -129,7 +159,6 @@ def triage_node(state: AgentState) -> AgentState:
     """
     
     messages = state["messages"]
-    last_message = messages[-1]
     recent_messages = messages[-20:] if len(messages) > 20 else messages
     
     if not state.get('cpf_input'):
@@ -153,6 +182,9 @@ Examples of when to call the tool:
 - Customer: "Olá" → ASK for the CPF
 - Customer: "Meu CPF é 1234" → ASK for the CPF again
 - Customer: "8734897349873497349879384" → ASK for the CPF again
+
+
+{system_prompt_final_instruction}
 
 REMEMBER: Respond in Portuguese.
 """
@@ -180,6 +212,8 @@ REMEMBER: Respond in Portuguese.
                     You are in an authentication flow and just validated the customer's CPF.
                     The provided CPF is invalid. Please inform a valid CPF with 11 digits. You should ask them for this in a polite and brief manner.
                     
+                    {system_prompt_final_instruction}
+                    
                     REMEMBER: Respond in Portuguese.
                     """
                 response_llm = llm.invoke(
@@ -189,6 +223,7 @@ REMEMBER: Respond in Portuguese.
                     ],
                     max_tokens=50,
                 )
+                
                 state['messages'].append(AIMessage(content=response_llm.content))
                 state['next_agent'] = END
                 return state
@@ -206,6 +241,8 @@ REMEMBER: Respond in Portuguese.
                 You are in an authentication flow and just validated the customer's CPF.
                 The CPF was saved. Confirm to the customer politely and ask for the date of birth briefly so the authentication process can continue.
                 Be brief and short here, don't drag it out.
+                
+                {system_prompt_final_instruction}
                 
                 REMEMBER: Respond in Portuguese.
                 """
@@ -247,6 +284,8 @@ Examples of when to call the tool:
 - Customer: "Oi" → ASK for date of birth
 - Customer: "128102981209981298" -> ASK for date of birth again
 - Customer: "Nasci no dia 01 de agosto de 1990" -> CALL save_birth_date
+
+{system_prompt_final_instruction}
 
 REMEMBER: Respond in Portuguese.
 """
@@ -299,6 +338,8 @@ REMEMBER: Respond in Portuguese.
                     The date of birth was saved successfully. Confirm to the customer politely that authentication has been completed.
                     Be brief and short here, don't drag it out.
                     
+                    {system_prompt_final_instruction}
+                    
                     REMEMBER: Respond in Portuguese.
                     """
                 final_response = llm.invoke(
@@ -319,6 +360,8 @@ REMEMBER: Respond in Portuguese.
                     {system_prompt_bank}
                     {triagem_prompt_bank}
                     You are in an authentication flow and just sent an invalid date of birth. Ask them to send it again in a polite and brief manner.
+                    
+                    {system_prompt_final_instruction}
                     
                     REMEMBER: Respond in Portuguese.
                     """
@@ -370,9 +413,105 @@ def currency_agent_node(state: AgentState) -> AgentState:
     
     At the end, respond directly: "A conversão de X para Y é Z. Posso ajudar em mais alguma coisa?" Don't respond with anything beyond something similar to this, if you have the result.
     
+    {system_prompt_final_instruction}
+    
     REMEMBER: Respond in Portuguese.
     """
 
-    response = currency_llm.invoke([SystemMessage(content=system_prompt), *messages], temperature=0.3)
+    response = currency_llm.invoke([SystemMessage(content=system_prompt), *messages], temperature=0.4, max_tokens=150)
     return {"messages": [response]}
 
+
+def credit_agent_node(state: AgentState) -> AgentState:
+    messages = state["messages"]
+    
+    
+    client_context = f"""
+    LOGGED CLIENT DATA:
+    Name: {state.get('name', 'N/A')}
+    CPF: {state.get('cpf_input', 'N/A')}
+    Current Score: {state.get('score', 0)}
+    Current Limit: R$ {state.get('credit_limit', 0)}
+    """
+
+    last_message = messages[-1]
+
+    if isinstance(last_message, ToolMessage) and last_message.tool_call_id == "process_limit_increase_request":
+        
+        tool_output = last_message.content.lower()
+        is_rejected = "rejeitado" in tool_output
+        
+        if is_rejected:
+            system_prompt = f"""
+            {system_prompt_bank}
+            You are a Credit Agent.
+            
+            The customer's limit increase request was REJECTED by the system.
+            
+            YOUR MISSION NOW:
+            1. Inform the rejection in an empathetic and professional manner.
+            2. MANDATORY: Offer to conduct a "Credit Profile Interview" YOURSELF right now.
+               - Explain that you can collect updated financial data (income, expenses) to recalculate their score immediately.
+               - Use a phrasing like: "If you wish, I can start a profile analysis interview now to try to adjust your score."
+            3. If the customer agrees (says YES), respond exactly: "Vou iniciar a entrevista agora."
+            
+            {system_prompt_final_instruction}
+            
+            Respond in Portuguese.
+            """
+        else:
+            system_prompt = f"""
+            {system_prompt_bank}
+            You are a Credit Agent.
+            The request was APPROVED.
+            
+            YOUR MISSION:
+            1. Congratulate the customer.
+            2. Confirm the new limit.
+            3. Ask if you can help with anything else.
+            
+            {system_prompt_final_instruction}
+            
+            Respond in Portuguese.
+            """
+            
+        response = llm.invoke(
+            [SystemMessage(content=system_prompt), *messages[-10:]],
+            temperature=0.3
+        )
+        return {"messages": [response]}
+
+    else:
+                
+        system_prompt = f"""
+        {system_prompt_bank}
+        
+        CLIENT CONTEXT:
+        {client_context}
+        
+        YOUR RESPONSIBILITIES:
+        1. If the customer asks about the current limit, use the tool "get_score_and_or_limit" to retrieve the most up-to-date information.
+        
+        2. If the customer requests a LIMIT INCREASE:
+           - Check if they mentioned the desired value.
+           - If they DID NOT mention the value, ask: "Para qual valor você deseja aumentar seu limite?"
+           - If they ALREADY mentioned the value, CALL THE TOOL `process_limit_increase_request` immediately.
+           - Use the data (CPF, Current Limit, Score) that is already in the context to fill the tool arguments.
+        
+        3. If the customer accepts to go to the interview (after a previous rejection):
+           - Just say you will transfer them.
+           
+        Be direct and professional. If he asks something about the information, some tip, prepare a good response.
+        
+        {system_prompt_final_instruction}
+        
+        Respond in Portuguese.
+        """
+        
+        response = credit_llm.invoke(
+            [SystemMessage(content=system_prompt), *messages[-10:]],
+            temperature=0.3,
+            max_tokens=300
+        )
+        
+        return {"messages": [response]}
