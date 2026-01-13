@@ -58,9 +58,7 @@ def build_graph():
     )
     workflow.add_edge("currency_tools", "currency_agent")
 
-    workflow.add_conditional_edges(
-        "triage_agent", route_from_triage, {"supervisor": "supervisor", END: END}
-    )
+    workflow.add_edge("triage_agent", END)
 
     workflow.add_conditional_edges(
         "credit_agent",
@@ -76,7 +74,7 @@ def build_graph():
     workflow.add_conditional_edges(
         "interview_agent",
         route_interview_logic,
-        {"interview_tools": "credit_tools", "credit_agent": "credit_agent", END: END},
+        {"credit_tools": "credit_tools", "credit_agent": "credit_agent", END: END},
     )
     workflow.add_edge("credit_tools", "credit_agent")
 
@@ -109,7 +107,7 @@ def route_from_supervisor(state: AgentState) -> str:
 
 
 def route_from_triage(state: AgentState) -> str:
-    """Triage always goes back to supervisor"""
+    """Triage always end"""
     return END
 
 
@@ -130,7 +128,7 @@ def route_interview_logic(state: AgentState) -> str:
     last_message = state["messages"][-1]
 
     if hasattr(last_message, "tool_calls") and len(last_message.tool_calls) > 0:
-        return "interview_tools"
+        return "credit_tools"
 
     content = last_message.content.upper()
     if (
