@@ -79,7 +79,7 @@ def credit_agent_node(state: AgentState) -> AgentState:
     RESPONSIBILITIES:
     1. Consult Limit/Score: Use `get_score_and_or_limit`.
     
-    2. Limit Increase Request:
+    2. Limit Increase Request, when user wants to increase limit:
         - Check desired value.
         - If missing value -> Ask.
         - If present -> CALL `process_limit_increase_request`.

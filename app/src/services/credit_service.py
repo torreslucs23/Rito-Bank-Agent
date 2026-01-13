@@ -54,6 +54,7 @@ class CreditService:
         Atualiza o limite de crédito do cliente no arquivo clients.csv (Persistência).
         """
         try:
+            print("juijuiji")
             if not self.clients_path.exists():
                 logger.error("Arquivo clients.csv não encontrado.")
                 return False

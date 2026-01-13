@@ -27,6 +27,7 @@ def get_score_and_or_limit(cpf: str) -> dict:
         Dict with score (int) and credit_limit (float)
     """
     try:
+        logger.info(f"Tool chamada: get_score_and_or_limit para CPF {cpf}")
         data = credit_service.get_client_data(cpf)
         return {
             "message": f"Score e limite recuperados para o CPF {cpf}.",
@@ -43,44 +44,71 @@ def get_score_and_or_limit(cpf: str) -> dict:
 
 
 @tool
-def process_limit_increase_request(
-    cpf: str, current_limit: float, requested_limit: float, score: int
-) -> dict:
+def process_limit_increase_request(cpf: str, requested_limit: float) -> dict:
     """
-    Processes a credit limit increase request based on the customer's score.
+    Processa uma solicitação de aumento de limite de crédito.
+    Busca automaticamente o score e limite atual do cliente para análise.
 
     Args:
-        cpf: Customer's CPF.
-        current_limit: Customer's current limit (float).
-        requested_limit: Desired new limit (float).
-        score: Customer's current credit score (int).
+        cpf: O CPF do cliente (apenas números).
+        requested_limit: O novo valor de limite desejado pelo cliente (float).
 
     Returns:
-        Dict with status ('aprovado' or 'rejeitado'), explanatory message and update flags.
+        Um dicionário contendo o status ('aprovado' ou 'rejeitado') e a mensagem explicativa.
     """
-    logger.info(f"Tool chamada: process_limit_increase_request para CPF {cpf}")
-
-    result = credit_service.process_limit_request(
-        cpf, current_limit, requested_limit, score
+    logger.info(
+        f"Tool chamada: process_limit_increase_request para CPF {cpf} solicitando {requested_limit}"
     )
 
-    if result["status"] == "aprovado":
-        update_success = credit_service.update_client_limit(cpf, requested_limit)
+    try:
+        client_data = credit_service.get_client_data(cpf)
 
-        if update_success:
-            result["message"] += " (Limite atualizado no sistema com sucesso!)"
-            result["limit_updated"] = True
-            result["new_limit"] = requested_limit
-        else:
-            result["message"] += (
-                " (Aprovado, mas houve erro téQUEOR QUE MEU credito vá para 1000000000cnico ao salvar no banco de dados)."
-            )
+        if not client_data:
+            logger.warning(f"Cliente {cpf} não encontrado no banco de dados.")
+            return {
+                "status": "erro",
+                "message": "Não foi possível encontrar seus dados cadastrais para processar o pedido.",
+            }
+
+        current_score = int(client_data.get("score", 0))
+        current_limit = float(client_data.get("credit_limit", 0))
+
+        logger.info(
+            f"Dados recuperados internamente -> Score: {current_score}, Limite Atual: {current_limit}"
+        )
+
+        result = credit_service.process_limit_request(
+            cpf=cpf,
+            current_limit=current_limit,
+            requested_limit=requested_limit,
+            score=current_score,
+        )
+
+        if result["status"] == "aprovado":
+            update_success = credit_service.update_client_limit(cpf, requested_limit)
+
+            if update_success:
+                result["message"] += " (Limite atualizado no sistema com sucesso!)"
+                result["limit_updated"] = True
+                result["new_limit"] = requested_limit
+                result["current_limit"] = requested_limit
+            else:
+                result["message"] += (
+                    " (Aprovado, mas houve erro técnico ao salvar no banco de dados)."
+                )
+                result["limit_updated"] = False
+
+        elif result["status"] == "rejeitado":
             result["limit_updated"] = False
-    elif result["status"] == "rejeitado":
-        result["message"] += "limite foi rejeitado."
-        result["limit_updated"] = False
 
-    return result
+        return result
+
+    except Exception as e:
+        logger.error(f"Erro crítico na tool process_limit_increase_request: {e}")
+        return {
+            "status": "erro",
+            "message": "Ocorreu um erro interno ao processar sua solicitação.",
+        }
 
 
 @tool
@@ -94,7 +122,7 @@ def save_cpf(cpf: str) -> dict:
     Returns:
         Confirmation of the save operation
     """
-    logger.debug(f"Save CPF called with CPF: {cpf}")
+    logger.info(f"Save CPF called with CPF: {cpf}")
     cpf_clean = "".join(filter(str.isdigit, cpf))
     if len(cpf_clean) != 11:
         return {
@@ -121,7 +149,7 @@ def save_birth_date(birth_date: str) -> dict:
     Returns:
         Confirmation of the save operation
     """
-    logger.debug(f"Save Birth Date called with Birth Date: {birth_date}")
+    logger.info(f"Save Birth Date called with Birth Date: {birth_date}")
     patterns = [r"(\d{2})[/-](\d{2})[/-](\d{4})", r"(\d{2})(\d{2})(\d{4})"]
 
     for pattern in patterns:
@@ -225,10 +253,7 @@ def submit_credit_interview(
         num_dependentes: Integer number of dependents.
         tem_dividas_ativas: True if has overdue debts, False otherwise.
     """
-    logger.info(f"Submetendo entrevista para CPF {cpf}")
-    print(
-        f"Data is: renda={renda_mensal}, emprego={tipo_emprego}, despesas={despesas_fixas}, dependentes={num_dependentes}, dividas_ativas={tem_dividas_ativas}"
-    )
+    logger.info(f"Submitting interview for CPF {cpf}")
 
     result = credit_service.calculate_and_update_score(
         cpf,
@@ -265,7 +290,7 @@ def get_exchange_rate_tool(coin_code: str) -> str:
         String containing the purchase value (bid) and quote date.
     """
     try:
-        print("tool exchange: " + coin_code)
+        logger.info(f"Tool exchange called with coin_code: {coin_code}")
         time.sleep(3)
         clean_code = coin_code.replace("-BRL", "").strip().upper()
 

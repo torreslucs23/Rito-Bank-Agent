@@ -43,9 +43,10 @@ if the customer explicitly talks about "limit", "credit increase", "score", "cre
 - "quero aumentar meu limite"
 - "qual meu limite atual?"
 - "liberar mais crédito"
+- "quero aumentar meu limite de crédito"
 or other similar variations → respond ONLY: CREDIT
 
-if the customer explicitly wants to increase your credit with an interview:
+if the customer explicitly wants to an interview, just when he wants an 'interview':
 - "quero fazer uma entrevista para aumentar meu limite"
 - "gostaria de responder algumas perguntas para aumentar meu limite"
 - "preciso aumentar meu limite de crédito"
