@@ -16,7 +16,7 @@ def currency_agent_node(state: AgentState) -> AgentState:
     logger.info("Entering Currency Agent Node")
 
     messages = (
-        state["messages"][-10:] if len(state["messages"]) > 10 else state["messages"]
+        state["messages"][-20:] if len(state["messages"]) > 20 else state["messages"]
     )
 
     system_prompt = f"""{SYSTEM_PROMPT_BANK}
@@ -38,7 +38,7 @@ def currency_agent_node(state: AgentState) -> AgentState:
     try:
         response = currency_llm.invoke(
             [SystemMessage(content=system_prompt), *messages],
-            temperature=0.4,
+            temperature=0.1,
             max_tokens=150,
         )
     except Exception as e:
