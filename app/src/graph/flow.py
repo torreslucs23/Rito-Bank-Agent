@@ -8,6 +8,9 @@ from app.src.graph.nodes.supervisor import supervisor_node
 from app.src.graph.nodes.triage import triage_node
 from app.src.graph.state import AgentState
 from app.src.llm.tools import *
+import dotenv
+
+dotenv.load_dotenv()
 
 
 def build_graph():

@@ -1,0 +1,11 @@
+.git
+.venv
+.clj-kondo
+.lsp
+.cache
+__pycache__
+*.pyc
+node_modules
+dist
+build
+.env

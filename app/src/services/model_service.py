@@ -4,9 +4,9 @@ from app.src.core.app_state import app_state
 
 state1 = {
     "messages": [],
-    "cpf_input": "12345678900",
-    "birth_date": "1990-05-15",
-    "authenticated": True,
+    "cpf_input": None,
+    "birth_date": None,
+    "authenticated": False,
     "authentication_attempts": 0,
     "next_agent": None,
     "credit_interview": False,

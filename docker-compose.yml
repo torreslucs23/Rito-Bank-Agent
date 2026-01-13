@@ -1,0 +1,26 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bank_agent_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/code/app
+      - ./pyproject.toml:/code/pyproject.toml
+      - ./app/src/data:/code/app/src/data
+    env_file:
+      - .env
+    restart: always
+
+  frontend:
+    build:
+      context: ./agent-frontend
+      dockerfile: Dockerfile
+    container_name: bank_agent_frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: always

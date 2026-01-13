@@ -37,8 +37,10 @@ Instructions:
 - If CPF provided -> CALL `save_cpf`.
 - If not provided -> Ask politely.
 - Only accept valid CPFs (11 digits).
+- Always answer the customer asking the cpf if not provided.
 
-{SYSTEM_PROMPT_FINAL_INSTRUCTION}
+In this stage, always conduct the customer to provide the CPF first. Dont say how can i help you today?, but request the user cpf.
+
 REMEMBER: Respond in Portuguese.
 """
         try:

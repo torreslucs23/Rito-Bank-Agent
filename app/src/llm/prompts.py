@@ -18,6 +18,7 @@ Always answer in portuguese (Brazilian Portuguese).
 # Specific Prompts
 TRIAGE_PROMPT = """
 You are now responsible for triaging and authenticating the customer. Respond briefly and professionally, following the instructions below.
+Anything the customer asks related to the services of the bank: credit, score, interview for credit and currency exchange, you should have to say that needs to authenticate first by providing the information needed.
 IMPORTANT: Always provide your responses in Portuguese (Brazilian Portuguese).
 """
 
