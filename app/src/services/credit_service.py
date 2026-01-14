@@ -18,7 +18,7 @@ class CreditService:
         self, cpf: str, current_limit: float, requested_limit: float, score: int
     ) -> dict:
         """
-        Orquestra o processo de validação, decisão e log do aumento de limite.
+        Orchestrates the validation, decision, and logging process for credit limit increases.
         """
         try:
             if not self.rules_path.exists():
@@ -51,10 +51,9 @@ class CreditService:
 
     def update_client_limit(self, cpf: str, new_limit: float) -> bool:
         """
-        Atualiza o limite de crédito do cliente no arquivo clients.csv (Persistência).
+        Updates the client's credit limit in the clients.csv file.
         """
         try:
-            print("juijuiji")
             if not self.clients_path.exists():
                 logger.error("Arquivo clients.csv não encontrado.")
                 return False
@@ -80,8 +79,8 @@ class CreditService:
 
     def get_client_data(self, cpf: str) -> dict:
         """
-        Busca os dados completos do cliente (Score, Limite, Nome) no CSV.
-        Retorna um dicionário ou None se não encontrar.
+        Retrieves complete client data (Score, Limit, Name) from the CSV.
+        Returns a dictionary or None if not found.
         """
         try:
             if not self.clients_path.exists():
@@ -115,7 +114,7 @@ class CreditService:
         tem_dividas: bool,
     ) -> dict:
         """
-        Calcula o novo score baseado na fórmula ponderada e atualiza o CSV.
+        Calculates the new score based on a weighted formula and updates the CSV.
         """
         try:
             PESO_RENDA = 30
@@ -160,7 +159,7 @@ class CreditService:
             return {"success": False, "error": str(e)}
 
     def _update_client_field(self, cpf: str, field: str, value) -> bool:
-        """Método genérico para atualizar um campo no clients.csv"""
+        """Generic method to update a field in clients.csv"""
         try:
             if not self.clients_path.exists():
                 return False
@@ -190,7 +189,7 @@ class CreditService:
             return False
 
     def _get_max_allowed_limit(self, score: int) -> float:
-        """Lê o CSV de regras e retorna o limite máximo para o score dado."""
+        """Reads the rules CSV and returns the maximum limit for the given score."""
         try:
             df_rules = pd.read_csv(self.rules_path)
             for _, row in df_rules.iterrows():
@@ -202,7 +201,7 @@ class CreditService:
             raise e
 
     def _log_transaction(self, cpf: str, current: float, requested: float, status: str):
-        """Grava a solicitação no arquivo de log CSV."""
+        """Records the request in the CSV log file."""
         try:
             self.log_path.parent.mkdir(parents=True, exist_ok=True)
             file_exists = self.log_path.exists()
